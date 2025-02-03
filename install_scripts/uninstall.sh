@@ -8,20 +8,19 @@ function error_exit {
 
 CURRENT_DIR="$PWD"
 
-
 # Detect the operating system
 OS_TYPE=$(uname)
 KERNEL_INFO=$(uname -r)
 
 if [ "$OS_TYPE" == "Darwin" ]; then
     echo "Starting uninstallation process..."
-    
+
     # Remove xschem-gaw installation
     if [ -d "/tmp/xschem-gaw" ]; then
         echo "Uninstalling xschem-gaw..."
         sudo rm -rf "/tmp/xschem-gaw" || error_exit "Failed to remove xschem-gaw directory."
     fi
-    
+
     # Uninstall xschem
     echo "Uninstalling xschem..."
     if [ -d "/Users/$(whoami)/opt/xschem" ]; then
@@ -33,19 +32,19 @@ if [ "$OS_TYPE" == "Darwin" ]; then
     if [ -d "/Users/$(whoami)/.xschem" ]; then
         sudo rm -rf "/Users/$(whoami)/.xschem" || error_exit "Failed to remove .xschem directory."
     fi
-    
+
     # Uninstall Tcl and Tk
     echo "Uninstalling Tcl and Tk..."
     if [ -d "/usr/local/opt/tcl-tk" ]; then
         sudo rm -rf "/usr/local/opt/tcl-tk" || error_exit "Failed to remove Tcl-Tk directory."
     fi
-    
+
     # Remove symlink for libtk
     echo "Removing symlink for libtk..."
     if [ -L "/opt/X11/lib/libtk8.6.dylib" ]; then
         sudo rm "/opt/X11/lib/libtk8.6.dylib" || error_exit "Failed to remove symlink for libtk."
     fi
-    
+
     # Uninstall dependencies installed by Homebrew
     echo "Uninstalling Homebrew dependencies..."
     for pkg in cairo ngspice libxpm macvim dbus jpeg gtk+3 pango autoconf automake libtool pkg-config at-spi2-core; do
@@ -56,18 +55,18 @@ if [ "$OS_TYPE" == "Darwin" ]; then
             echo "$pkg is not installed, skipping..."
         fi
     done
-    
+
     # Remove specific directories if they exist
     echo "Removing specific directories..."
     rm -rf /usr/local/etc/openssl@3
     rm -rf /usr/local/etc/ca-certificates
     rm -rf /usr/local/etc/pmix-mca-params.conf
     rm -rf /usr/local/etc/dbus-1
-    
+
     # Uninstall Xquartz
     echo "Uninstalling Xquartz..."
     brew uninstall --cask xquartz || error_exit "Failed to uninstall Xquartz."
-    
+
     # Remove NO_AT_BRIDGE from bashrc or zshrc
     echo "Updating shell configuration..."
     if [ -f ~/.bashrc ]; then
@@ -77,36 +76,43 @@ if [ "$OS_TYPE" == "Darwin" ]; then
     else
         echo "Neither ~/.bashrc nor ~/.zshrc found. Please remove 'export NO_AT_BRIDGE=1' manually."
     fi
-    
+
     if [ -n "$SHELL_CONFIG" ]; then
         sed -i '' '/export NO_AT_BRIDGE=1/d' "$SHELL_CONFIG"
     fi
-    
+
     # Source the updated shell configuration (do not run as root)
     echo "Sourcing the updated shell configuration..."
-    source "$SHELL_CONFIG" || error_exit "Failed to source $SHELL_CONFIG."
-    
-    
+    if [ -n "$SHELL_CONFIG" ]; then
+        source "$SHELL_CONFIG" || error_exit "Failed to source $SHELL_CONFIG."
+    fi
+
     # REMOVE BeSpice Wave
     # Uninstall Analog Flavor application
     if [ -d "/Applications/Analog Flavor.app" ]; then
         echo "Uninstalling Analog Flavor application..."
         sudo rm -rf "/Applications/Analog Flavor.app" || error_exit "Failed to remove Analog Flavor application."
     fi
-    
+
     if [ -d "~/analog_flavor_eval" ]; then
         sudo rm -rf "~/analog_flavor_eval" || error_exit "Failed to remove Analog Flavor folder."
     fi
     
     
+    
+
+    
     echo "Uninstallation process completed successfully."
+
 elif [ "$OS_TYPE" == "Linux" ]; then
-    # Linux Installation Script
+    ########################################################################
+    # Linux Uninstall Script
+    ########################################################################
     echo "Detected Linux. Running Linux uninstall script..."
 
-    set -eu -o pipefail # fail on error and report it, debug all lines
+    set -eu -o pipefail
 
-    sudo -n true    # Run as a superuser and do not ask for a password. Exit status as successful.
+    sudo -n true
     test $? -eq 0 || error_exit "you should have sudo privilege to run this script"
 
     echo "Removing xschem and dependencies..."
@@ -124,16 +130,22 @@ elif [ "$OS_TYPE" == "Linux" ]; then
     echo "Removing NGspice..."
     sudo rm -rf ngspice-ngspice
 
+    # Uninstall any packages we installed
     echo "Removing the must-have pre-requisites"
     while read -r p ; do sudo apt-get remove -y $p ; done < <(cat << "EOF"
-        build-essential libx11-dev libxpm-dev libxaw7-dev
-        libcairo2-dev tcl-dev tk-dev libxrender-dev libgtk-2.0-dev gcc g++ gfortran
-        make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-        gawk wget libncurses-dev
+build-essential libx11-dev libxpm-dev libxaw7-dev
+libcairo2-dev libxrender-dev gcc g++ gfortran
+make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
+gawk wget libncurses-dev pkg-config libjpeg-dev
+tcl8.6 tk8.6 tcl8.6-dev tk8.6-dev libgtk-3-dev
 EOF
     )
 
+    # (Optional) Remove residual config or dependencies
+    sudo apt-get autoremove -y
+
     echo "Uninstall completed successfully."
+
 else
     error_exit "Unsupported operating system. This script supports macOS and Linux only."
 fi
