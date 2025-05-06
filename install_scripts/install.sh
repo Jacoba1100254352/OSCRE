@@ -272,14 +272,19 @@ elif [ "$OS_TYPE" == "Linux" ]; then
     sudo -n true    # Run as a superuser and do not ask for a password. Exit status as successful.
     test $? -eq 0 || error_exit "You should have sudo privilege to run this script."
 
+# TODO: Add option to disable Verilog A if flag: (don't include the following line)
+    sudo add-apt-repository -y universe   # only needs to be done once
+
     echo "Installing the must-have pre-requisites..."
-    
+
+# TODO: Add option to disable Verilog A if flag: (don't include adms)
     while read -r p ; do sudo apt-get install -y $p ; done < <(cat << "EOF"
 git build-essential libx11-dev libxpm-dev libxaw7-dev
 libcairo2-dev libxrender-dev gcc g++ gfortran
 make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-gawk wget libncurses-dev tig pkg-config libjpeg-dev
+gawk wget libncurses-dev tig pkg-config libjpeg-dev libtool-bin
 tcl8.6 tk8.6 tcl8.6-dev tk8.6-dev libgtk-3-dev
+gettext gperf intltool adms
 EOF
     )
 
@@ -305,11 +310,16 @@ EOF
     echo "Installing NGspice..."
     git clone https://git.code.sf.net/p/ngspice/ngspice ngspice-ngspice
     cd ngspice-ngspice
-    ./autogen.sh --adms
+    ./autogen.sh --adms     # TODO: Add option to disable Verilog A if flag: (don't include --adms)
+    
+    # The following two are in place of the above ./autogen.sh line
+    # libtoolize --copy --force           # installs ltmain.sh in .
+    # autoreconf -fi                      # = aclocal + autoconf + automake
+
     mkdir release
     cd release
     #--with-x --enable-openmp --enable-adms
-    ../configure  --with-x --with-xspice --enable-openmp --enable-adms --with-readline=yes --disable-debug
+    ../configure  --with-x --with-xspice --enable-openmp --enable-adms --with-readline=yes --disable-debug # TODO: Add option to disable Verilog A if flag: (don't include --enable-adms)
     sudo make -j4
     sudo make install
 
