@@ -82,13 +82,10 @@ elif [ "$OS_TYPE" == "Linux" ]; then
 
     echo "installing the must-have pre-requisites"
     sudo apt-get remove --purge -y \
-        build-essential flex bison m4 tcsh csh \
-        libx11-dev tcl-dev tk-dev libcairo2-dev \
-        libxcb1-dev libx11-xcb-dev libxrender-dev \
-        libxpm-dev libncurses-dev gawk libtool \
-        libreadline-dev autoconf automake \
-        gcc g++ gfortran make cmake libfl-dev \
-        wget tig
+        flex bison m4 libfl-dev tcl-dev tk-dev \
+        libcairo2-dev libxcb1-dev libx11-xcb-dev \
+        libxrender-dev libxpm-dev libncurses-dev \
+        libreadline-dev gawk tcsh csh gfortran tig
 
     # Auto‑remove any orphaned packages
     echo "Auto‑removing orphaned packages..."

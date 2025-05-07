@@ -108,7 +108,8 @@ elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
     ########################################################################
     # WSL Installation Script
     ########################################################################
-    
+    echo "Detected WSL (Windows Subsystem for Linux)."
+    echo "No uninstall yet"
 
 elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################
@@ -163,18 +164,15 @@ elif [ "$OS_TYPE" == "Linux" ]; then
         sed -i '/# ---- added by xschem install script ----/,/# -----------------------------------------/d' "$SHELL_RC"
         echo "Removed XSchem exports from $SHELL_RC"
     else
-        echo "No ~/.bashrc or ~/.zshrc detected; skipping shell‑config cleanup."
+        echo "No ~/.bashrc or ~/.zshrc detected; skipping shell-config cleanup."
     fi
 
     echo "Uninstalling APT packages that were installed for XSchem…"
     PACKAGES=(
-        git build-essential
-        libx11-dev libxpm-dev libxext-dev libxaw7-dev libxrender-dev
-        libcairo2-dev libjpeg-dev
-        tcl8.6-dev tk8.6-dev
-        libreadline-dev flex bison gawk
-        autoconf automake libtool libtool-bin
-        wget curl libx11-xcb-dev xterm ngspice
+        libx11-dev libxpm-dev libxext-dev libxaw7-dev \
+        libxrender-dev libcairo2-dev libjpeg-dev tcl8.6-dev \
+        tk8.6-dev libreadline-dev flex bison gawk autoconf \
+        automake libtool libtool-bin libx11-xcb-dev ngspice
     )
     sudo apt-get remove --purge -y "${PACKAGES[@]}"
     sudo apt-get autoremove -y
