@@ -14,6 +14,9 @@ OS_TYPE=$(uname)
 KERNEL_INFO=$(uname -r)
 
 if [ "$OS_TYPE" == "Darwin" ]; then
+    ########################################################################
+    # MacOS Uninstall Script
+    ########################################################################
     echo "Starting uninstallation process..."
     
     # Remove xschem-gaw installation
@@ -101,50 +104,80 @@ if [ "$OS_TYPE" == "Darwin" ]; then
     
     echo "Uninstallation process completed successfully."
 
+elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
+    ########################################################################
+    # WSL Installation Script
+    ########################################################################
+    
+
 elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################
     # Linux Uninstall Script
     ########################################################################
     echo "Detected Linux. Running Linux uninstall script..."
 
-    set -eu -o pipefail # fail on error and report it, debug all lines
+    set -euo pipefail
 
-    sudo -n true    # Run as a superuser and do not ask for a password. Exit status as successful.
-    test $? -eq 0 || error_exit "you should have sudo privilege to run this script"
+    #----------------------------------------
+    # helper for fatal errors
+    error_exit() {
+        echo "Error: $1" >&2
+        exit 1
+    }
 
-    echo "Removing xschem and dependencies..."
-    sudo rm -rf xschem-src
+    #----------------------------------------
+    # must be Linux
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        error_exit "This uninstall script is for Linux only."
+    fi
 
-    # MAGIC
-    echo "Removing MAGIC..."
-    sudo rm -rf magic
+    #----------------------------------------
+    # check sudo
+    if ! sudo -n true 2>/dev/null; then
+        error_exit "Requires sudo privileges."
+    fi
 
-    # OPEN PDK
-    echo "Removing OPEN PDK..."
-    sudo rm -rf open_pdks
+    echo "Removing XSchem binary, Tcl/Tk libs, headers…"
+    sudo rm -f /usr/local/bin/xschem
+    sudo rm -f /usr/local/bin/wish8.6 /usr/local/bin/tclsh8.6
+    sudo rm -rf /usr/local/lib/libtk8.6* /usr/local/lib/libtcl8.6*
+    sudo rm -rf /usr/local/include/tk8.6 /usr/local/include/tcl8.6
 
-    # NGspice
-    echo "Removing NGspice..."
-    sudo rm -rf ngspice-ngspice
+    echo "Cleaning up any leftover share files…"
+    sudo rm -rf /usr/local/share/xschem
+    sudo rm -rf /tmp/tcl8.6.13 /tmp/tk8.6.13 /tmp/xschem
 
-    # Uninstall any packages we installed
-    echo "Removing the must-have pre-requisites"
-    while read -r p ; do sudo apt-get remove -y $p ; done < <(cat << "EOF"
-build-essential libx11-dev libxpm-dev libxaw7-dev
-libcairo2-dev libxrender-dev gcc g++ gfortran
-make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-gawk wget libncurses-dev pkg-config libjpeg-dev
-tcl8.6 tk8.6 tcl8.6-dev tk8.6-dev libgtk-3-dev
-EOF
+    echo "Updating linker cache…"
+    sudo ldconfig
+
+    echo "Undoing shell config edits…"
+    SHELL_RC=""
+    if [[ -f "$HOME/.bashrc" ]]; then
+        SHELL_RC="$HOME/.bashrc"
+    elif [[ -f "$HOME/.zshrc" ]]; then
+        SHELL_RC="$HOME/.zshrc"
+    fi
+
+    if [[ -n "$SHELL_RC" ]]; then
+        # Remove our block of exports
+        sed -i '/# ---- added by xschem install script ----/,/# -----------------------------------------/d' "$SHELL_RC"
+        echo "Removed XSchem exports from $SHELL_RC"
+    else
+        echo "No ~/.bashrc or ~/.zshrc detected; skipping shell‑config cleanup."
+    fi
+
+    echo "Uninstalling APT packages that were installed for XSchem…"
+    PACKAGES=(
+        git build-essential
+        libx11-dev libxpm-dev libxext-dev libxaw7-dev libxrender-dev
+        libcairo2-dev libjpeg-dev
+        tcl8.6-dev tk8.6-dev
+        libreadline-dev flex bison gawk
+        autoconf automake libtool libtool-bin
+        wget curl libx11-xcb-dev xterm ngspice
     )
-
-#     while read -r p ; do sudo apt-get remove -y $p ; done < <(cat << "EOF"
-#         build-essential libx11-dev libxpm-dev libxaw7-dev
-#         libcairo2-dev tcl-dev tk-dev libxrender-dev libgtk-2.0-dev gcc g++ gfortran
-#         make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-#         gawk wget libncurses-dev
-# EOF
-#     )
+    sudo apt-get remove --purge -y "${PACKAGES[@]}"
+    sudo apt-get autoremove -y
 
     echo "Uninstall completed successfully."
 

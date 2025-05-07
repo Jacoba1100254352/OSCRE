@@ -1,4 +1,4 @@
-# RAD-HARD
+# OSCRE
 
 Open-Source Radiation Hardening circuit-level Simulator in conjunction with SCALE
 
@@ -6,7 +6,22 @@ Open-Source Radiation Hardening circuit-level Simulator in conjunction with SCAL
 
 ## Installation
 
+source the install script located in `install_scripts`:
+```sh
+./install.sh
+```
+
+Likewise to uninstall, source the uninstall script:
+```sh
+./uninstall.sh
+```
+
 ## Instructions and Run examples
+
+Once installed, simply run xschem from the terminal with the following command:
+```sh
+xschem
+```
 
 ### How to Use xschem and ngspice Together
 
@@ -27,10 +42,10 @@ Open-Source Radiation Hardening circuit-level Simulator in conjunction with SCAL
       ```
     - Save the output to a file (e.g., `ngspice_output.txt`).
 
-4. **Analyze Results with C++ Program:**
-    - Compile and run `compute.cpp` to process the simulation results:
-      ```sh
-      g++ -o compute compute.cpp
-      ./compute
-      ```
+## Skywater PDK
+The Skywater PDK install scripts have only been completed for MacOS and Linux and may not 
+be directly supported in future updates. (Tested with macOS 15 and Linux Mint (Cinnamon)).
+
+## Documentation
+**For more thorough directions and documentation, refer to the `Documentation` folder in this repo.**
 

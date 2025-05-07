@@ -62,7 +62,9 @@ if [ "$OS_TYPE" == "Darwin" ]; then
     
     echo "Uninstallation process completed successfully."
 elif [ "$OS_TYPE" == "Linux" ]; then
-    # Linux Installation Script
+    ########################################################################
+    # Linux Uninstall Script
+    ########################################################################
     echo "Detected Linux. Running Linux uninstall script..."
 
     set -eu -o pipefail # fail on error and report it, debug all lines
@@ -79,16 +81,21 @@ elif [ "$OS_TYPE" == "Linux" ]; then
     sudo rm -rf open_pdks
 
     echo "installing the must-have pre-requisites"
-    while read -r p ; do sudo apt-get remove -y $p ; done < <(cat << "EOF"
-        build-essential flex bison m4 tcsh csh
-        libx11-dev tcl-dev tk-dev libcairo2 libcairo2-dev
-        libxcb1 libx11-xcb-dev libxrender1 libxrender-dev libxpm4 libxpm-dev libncurses-dev
-        gawk libtool readline-common libreadline-dev autoconf automake
-        gcc g++ gfortran make cmake libfl-dev wget
-EOF
-    )
+    sudo apt-get remove --purge -y \
+        build-essential flex bison m4 tcsh csh \
+        libx11-dev tcl-dev tk-dev libcairo2-dev \
+        libxcb1-dev libx11-xcb-dev libxrender-dev \
+        libxpm-dev libncurses-dev gawk libtool \
+        libreadline-dev autoconf automake \
+        gcc g++ gfortran make cmake libfl-dev \
+        wget tig
+
+    # Auto‑remove any orphaned packages
+    echo "Auto‑removing orphaned packages..."
+    sudo apt-get autoremove --purge -y
 
     echo "Uninstall completed successfully."
+
 else
     error_exit "Unsupported operating system. This script supports macOS and Linux only."
 fi

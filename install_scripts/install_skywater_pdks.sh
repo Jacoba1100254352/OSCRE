@@ -84,7 +84,9 @@ elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
     
     
 elif [ "$OS_TYPE" == "Linux" ]; then
+    ########################################################################
     # Linux Installation Script
+    ########################################################################
     echo "Detected Linux. Running Linux installation script..."
 
     set -eu -o pipefail # fail on error and report it, debug all lines

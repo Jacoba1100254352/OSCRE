@@ -225,6 +225,7 @@ EOF
 
     # xschem Installation
     echo "Cloning xschem..."
+    rm -rf xschem-src
     git clone https://github.com/StefanSchippers/xschem.git xschem-src || error_exit "Failed to clone xschem."
     cd xschem-src
 
@@ -238,6 +239,7 @@ EOF
 
     # NGspice Installation
     echo "Installing NGspice..."
+    rm -rf ngspice-ngspice
     git clone https://git.code.sf.net/p/ngspice/ngspice ngspice-ngspice || error_exit "Failed to clone ngspice."
     cd ngspice-ngspice
 
@@ -267,71 +269,166 @@ elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################
     echo "Detected Linux. Running Linux installation script..."
 
-    set -eu -o pipefail # fail on error and report it, debug all lines
+    set -euo pipefail
 
-    sudo -n true    # Run as a superuser and do not ask for a password. Exit status as successful.
-    test $? -eq 0 || error_exit "You should have sudo privilege to run this script."
+    #----------------------------------------
+    # helper for fatal errors
+    error_exit() {
+        echo "Error: $1" >&2
+        exit 1
+    }
 
-# TODO: Add option to disable Verilog A if flag: (don't include the following line)
-    sudo add-apt-repository -y universe   # only needs to be done once
+    #----------------------------------------
+    # 1) detect OS
+    OS_TYPE=$(uname -s)
+    KERNEL_INFO=$(uname -r)
+    if [[ "$OS_TYPE" != "Linux" ]]; then
+        error_exit "This script is intended for Linux. Detected: $OS_TYPE"
+    fi
+    echo "Detected Linux (kernel $KERNEL_INFO)."
 
-    echo "Installing the must-have pre-requisites..."
+    #----------------------------------------
+    # 2) ensure sudo
+    if ! sudo -n true 2>/dev/null; then
+        error_exit "Requires sudo privileges to proceed."
+    fi
 
-# TODO: Add option to disable Verilog A if flag: (don't include adms)
-    while read -r p ; do sudo apt-get install -y $p ; done < <(cat << "EOF"
-git build-essential libx11-dev libxpm-dev libxaw7-dev
-libcairo2-dev libxrender-dev gcc g++ gfortran
-make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-gawk wget libncurses-dev tig pkg-config libjpeg-dev libtool-bin
-tcl8.6 tk8.6 tcl8.6-dev tk8.6-dev libgtk-3-dev
-gettext gperf intltool adms
+    #----------------------------------------
+    # 3) define paths and check sources
+    BASE_DIR=$(pwd)
+    INCLUDE_DIR="${BASE_DIR}/include"
+    INSTALL_SCRIPTS_DIR="${BASE_DIR}/Install Scripts"
+
+    [[ -f "${INCLUDE_DIR}/tcl8.6.13-src.tar.gz" ]] || \
+        error_exit "Missing Tcl archive at ${INCLUDE_DIR}/tcl8.6.13-src.tar.gz"
+
+    [[ -f "${INCLUDE_DIR}/tk8.6.13-src.tar.gz" ]] || \
+        error_exit "Missing Tk  archive at ${INCLUDE_DIR}/tk8.6.13-src.tar.gz"
+
+    #----------------------------------------
+    # 4) install distro packages
+    echo "Installing required packages via apt..."
+    sudo apt-get update
+    sudo apt-get install -y \
+        git build-essential \
+        libx11-dev libxpm-dev libxext-dev libxaw7-dev libxrender-dev \
+        libcairo2-dev libjpeg-dev \
+        tcl8.6-dev tk8.6-dev \
+        libreadline-dev flex bison gawk \
+        autoconf automake libtool libtool-bin \
+        wget curl libx11-xcb-dev xterm ngspice
+
+    #----------------------------------------
+    # 5) compile & install Tcl/Tk from source
+    TCLTK_PREFIX="/usr/local"
+    echo "Installing Tcl/Tk under $TCLTK_PREFIX..."
+    sudo rm -rf "$TCLTK_PREFIX/lib/tcl8.6" "$TCLTK_PREFIX/lib/tk8.6"
+    sudo mkdir -p "$TCLTK_PREFIX"
+
+    # Tcl
+    rm -rf /tmp/tcl8.6.13
+    tar -xzf "${INCLUDE_DIR}/tcl8.6.13-src.tar.gz" -C /tmp
+    cd /tmp/tcl8.6.13/unix
+    ./configure --prefix="$TCLTK_PREFIX" \
+        || error_exit "Tcl configure failed."
+    make                                                   \
+        || error_exit "Tcl make failed."
+    sudo make install                                     \
+        || error_exit "Tcl install failed."
+
+    # Tk
+    rm -rf /tmp/tk8.6.13
+    tar -xzf "${INCLUDE_DIR}/tk8.6.13-src.tar.gz" -C /tmp
+    cd /tmp/tk8.6.13/unix
+    ./configure --prefix="$TCLTK_PREFIX" \
+                --with-tcl="$TCLTK_PREFIX/lib" \
+                --with-x                    \
+                --x-includes=/usr/include/X11 \
+                --x-libraries=/usr/lib        \
+        || error_exit "Tk configure failed."
+    make                                                   \
+        || error_exit "Tk make failed."
+    sudo make install                                     \
+        || error_exit "Tk install failed."
+
+    # refresh linker cache
+    sudo ldconfig
+
+    #----------------------------------------
+    # 6) update shell config for runtime
+    echo "Updating shell configuration..."
+    SHELL_CONFIG=""
+    if [[ -f "$HOME/.bashrc" ]]; then
+        SHELL_CONFIG="$HOME/.bashrc"
+    elif [[ -f "$HOME/.zshrc" ]]; then
+        SHELL_CONFIG="$HOME/.zshrc"
+    fi
+
+    ENV_EXPORTS=$(cat <<EOF
+# ---- added by xschem install script ----
+export LD_LIBRARY_PATH="$TCLTK_PREFIX/lib:\$LD_LIBRARY_PATH"
+export PATH="\$HOME/opt/xschem/bin:\$PATH"
+export DISPLAY="\${DISPLAY:-:0}"
+# -----------------------------------------
 EOF
     )
 
-#     while read -r p ; do sudo apt-get install -y $p ; done < <(cat << "EOF"
-#         git build-essential libx11-dev libxpm-dev libxaw7-dev
-#         libcairo2-dev tcl-dev tk-dev libxrender-dev libgtk-2.0-dev gcc g++ gfortran
-#         make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-#         gawk wget libncurses-dev tig
-# EOF
-#     )
+    if [[ -n "$SHELL_CONFIG" ]]; then
+        if ! grep -Fq "added by xschem install script" "$SHELL_CONFIG"; then
+            echo "$ENV_EXPORTS" >> "$SHELL_CONFIG"
+            echo "Appended environment exports to $SHELL_CONFIG."
+        else
+            echo "Shell config already contains xschem exports; skipping."
+        fi
+    else
+        echo "No ~/.bashrc or ~/.zshrc found. Please add these lines to your shell config:"
+        echo "$ENV_EXPORTS"
+    fi
 
-    echo "Installing xschem and dependencies..."
+    # apply to current session
+    if [[ -z "${LD_LIBRARY_PATH:-}" ]]; then
+        export LD_LIBRARY_PATH="$TCLTK_PREFIX/lib"
+    else
+        export LD_LIBRARY_PATH="$TCLTK_PREFIX/lib:$LD_LIBRARY_PATH"
+    fi
 
-    git clone https://github.com/StefanSchippers/xschem.git xschem-src
-    cd xschem-src
+    export PATH="/usr/local/bin:$PATH"
+    export DISPLAY="${DISPLAY:-:0}"
 
-    ./configure
-    sudo make
-    sudo make install
-    cd ..
 
-    # NGspice
-    echo "Installing NGspice..."
-    git clone https://git.code.sf.net/p/ngspice/ngspice ngspice-ngspice
-    cd ngspice-ngspice
-    ./autogen.sh --adms     # TODO: Add option to disable Verilog A if flag: (don't include --adms)
-    
-    # The following two are in place of the above ./autogen.sh line
-    # libtoolize --copy --force           # installs ltmain.sh in .
-    # autoreconf -fi                      # = aclocal + autoconf + automake
+    #----------------------------------------
+    # 7) clone, build & install XSchem
+    echo "Cloning XSchem..."
+    rm -rf /tmp/xschem
+    git clone https://github.com/StefanSchippers/xschem.git /tmp/xschem \
+        || error_exit "Failed to clone XSchem."
+    cd /tmp/xschem
+    git checkout 973d01f                                 \
+        || error_exit "Failed to checkout commit 973d01f."
 
-    mkdir release
-    cd release
-    #--with-x --enable-openmp --enable-adms
-    ../configure  --with-x --with-xspice --enable-openmp --enable-adms --with-readline=yes --disable-debug # TODO: Add option to disable Verilog A if flag: (don't include --enable-adms)
-    sudo make -j4
-    sudo make install
+    echo "Configuring XSchem..."
+    ./configure --prefix="/usr/local"              \
+        || error_exit "XSchem configure failed."
 
-    # Copy radiation simulation blocks from repository to universal location
-    sudo cp -r ../rad_modeling_blocks /usr/local/share || true
+    echo "Patching Makefile.conf..."
+    sed -i.bak \
+    -e 's|CFLAGS=.*|CFLAGS=-std=c99 -I/usr/include/X11 -I/usr/include/cairo -I/usr/local/include -I/usr/include/jpeg -O2|' \
+    -e 's|LDFLAGS=.*|LDFLAGS=-L/usr/lib -L/usr/local/lib -lm -lcairo -ljpeg -lX11 -lXrender -lxcb -lxcb-render -lXpm -ltcl8.6 -ltk8.6|' \
+    Makefile.conf
 
-    # Add rad_modeling_blocks to the xschem library path
-    echo "append XSCHEM_LIBRARY_PATH :/usr/local/share/rad_modeling_blocks" >> ~/.xschem/xschemrc
-    echo "append XSCHEM_LIBRARY_PATH :$HOME" >> ~/.xschem/xschemrc
-    echo "set XSCHEM_START_WINDOW {/usr/local/share/rad_modeling_blocks/top.sch}" >> ~/.xschem/xschemrc
+    echo "Building XSchem..."
+    make clean && make                                   \
+        || error_exit "XSchem build failed."
 
+    echo "Installing XSchem..."
+    sudo make install                                    \
+        || error_exit "XSchem install failed."
+
+    echo "XSchem installation completed!"
+
+    #----------------------------------------
     echo "Installation completed successfully."
+    #----------------------------------------
 
 else
     error_exit "Unsupported operating system. This script supports macOS, Linux, and WSL only."
