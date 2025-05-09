@@ -192,76 +192,169 @@ if [ "$OS_TYPE" == "Darwin" ]; then
 
 elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
     ########################################################################
-    # WSL Installation Script
+    # WSL Installation Script       (Same as Linux)
     ########################################################################
-    echo "Detected WSL (Windows Subsystem for Linux)."
-    echo "Running WSL installation script..."
+    set -euo pipefail
 
-    # Update and upgrade
-    sudo apt update -y && sudo apt upgrade -y || error_exit "Failed to update/upgrade packages."
+    #----------------------------------------
+    # helper for fatal errors
+    error_exit() {
+        echo "Error: $1" >&2
+        exit 1
+    }
 
-    echo "Installing required packages..."
-    while read -r p ; do sudo apt-get install -y $p ; done < <(cat << "EOF"
-git build-essential libx11-dev libxpm-dev libxaw7-dev
-libcairo2-dev libxrender-dev gcc g++ gfortran
-make cmake bison flex m4 tcsh csh autoconf automake libtool libreadline-dev
-gawk wget libncurses-dev tig pkg-config libjpeg-dev
-tcl8.6 tk8.6 tcl8.6-dev tk8.6-dev libgtk-3-dev
+    #----------------------------------------
+    # 1) detect OS
+    OS_TYPE=$(uname -s)
+    KERNEL_INFO=$(uname -r)
+    if [[ "$OS_TYPE" != "Linux" ]]; then
+        error_exit "This script is intended for Linux. Detected: $OS_TYPE"
+    fi
+    echo "Detected Linux (kernel $KERNEL_INFO)."
+
+    #----------------------------------------
+    # 2) ensure sudo
+    if ! sudo -n true 2>/dev/null; then
+        error_exit "Requires sudo privileges to proceed."
+    fi
+
+    #----------------------------------------
+    # 3) define paths and check sources
+    BASE_DIR=$(pwd)
+    INCLUDE_DIR="${BASE_DIR}/include"
+    INSTALL_SCRIPTS_DIR="${BASE_DIR}/Install Scripts"
+
+    [[ -f "${INCLUDE_DIR}/tcl8.6.13-src.tar.gz" ]] || \
+        error_exit "Missing Tcl archive at ${INCLUDE_DIR}/tcl8.6.13-src.tar.gz"
+
+    [[ -f "${INCLUDE_DIR}/tk8.6.13-src.tar.gz" ]] || \
+        error_exit "Missing Tk  archive at ${INCLUDE_DIR}/tk8.6.13-src.tar.gz"
+
+    #----------------------------------------
+    # 4) install distro packages
+    echo "Installing required packages via apt..."
+    sudo apt-get update
+    sudo apt-get install -y \
+        git build-essential \
+        libx11-dev libxpm-dev libxext-dev libxaw7-dev libxrender-dev \
+        libcairo2-dev libjpeg-dev \
+        tcl8.6-dev tk8.6-dev \
+        libreadline-dev flex bison gawk \
+        autoconf automake libtool libtool-bin \
+        wget curl libx11-xcb-dev xterm ngspice
+
+    #----------------------------------------
+    # 5) compile & install Tcl/Tk from source
+    TCLTK_PREFIX="/usr/local"
+    echo "Installing Tcl/Tk under $TCLTK_PREFIX..."
+    sudo rm -rf "$TCLTK_PREFIX/lib/tcl8.6" "$TCLTK_PREFIX/lib/tk8.6"
+    sudo mkdir -p "$TCLTK_PREFIX"
+
+    # Tcl
+    rm -rf /tmp/tcl8.6.13
+    tar -xzf "${INCLUDE_DIR}/tcl8.6.13-src.tar.gz" -C /tmp
+    cd /tmp/tcl8.6.13/unix
+    ./configure --prefix="$TCLTK_PREFIX" \
+        || error_exit "Tcl configure failed."
+    make                                                   \
+        || error_exit "Tcl make failed."
+    sudo make install                                     \
+        || error_exit "Tcl install failed."
+
+    # Tk
+    rm -rf /tmp/tk8.6.13
+    tar -xzf "${INCLUDE_DIR}/tk8.6.13-src.tar.gz" -C /tmp
+    cd /tmp/tk8.6.13/unix
+    ./configure --prefix="$TCLTK_PREFIX" \
+                --with-tcl="$TCLTK_PREFIX/lib" \
+                --with-x                    \
+                --x-includes=/usr/include/X11 \
+                --x-libraries=/usr/lib        \
+        || error_exit "Tk configure failed."
+    make                                                   \
+        || error_exit "Tk make failed."
+    sudo make install                                     \
+        || error_exit "Tk install failed."
+
+    # refresh linker cache
+    sudo ldconfig
+
+    #----------------------------------------
+    # 6) update shell config for runtime
+    echo "Updating shell configuration..."
+    SHELL_CONFIG=""
+    if [[ -f "$HOME/.bashrc" ]]; then
+        SHELL_CONFIG="$HOME/.bashrc"
+    elif [[ -f "$HOME/.zshrc" ]]; then
+        SHELL_CONFIG="$HOME/.zshrc"
+    fi
+
+    ENV_EXPORTS=$(cat <<EOF
+# ---- added by xschem install script ----
+export LD_LIBRARY_PATH="$TCLTK_PREFIX/lib:\$LD_LIBRARY_PATH"
+export PATH="\$HOME/opt/xschem/bin:\$PATH"
+export DISPLAY="\${DISPLAY:-:0}"
+# -----------------------------------------
 EOF
     )
 
-    # Optional: Install x11-apps to test GUI forwarding
-    sudo apt-get install -y x11-apps
+    if [[ -n "$SHELL_CONFIG" ]]; then
+        if ! grep -Fq "added by xschem install script" "$SHELL_CONFIG"; then
+            echo "$ENV_EXPORTS" >> "$SHELL_CONFIG"
+            echo "Appended environment exports to $SHELL_CONFIG."
+        else
+            echo "Shell config already contains xschem exports; skipping."
+        fi
+    else
+        echo "No ~/.bashrc or ~/.zshrc found. Please add these lines to your shell config:"
+        echo "$ENV_EXPORTS"
+    fi
 
-    # Prompt the user about installing an X server on Windows
-    echo "--------------------------------------------------------------------------------"
-    echo "WSL Note:"
-    echo "  - To run GUI applications (like xschem), you need an X server on Windows."
-    echo "  - You can use VcXsrv, Xming, or similar. Once installed and running, set your DISPLAY."
-    echo "  - For example, you can add the following lines to your ~/.bashrc (or ~/.zshrc):"
-    echo "      export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0"
-    echo "      export LIBGL_ALWAYS_INDIRECT=1"
-    echo "--------------------------------------------------------------------------------"
+    # apply to current session
+    if [[ -z "${LD_LIBRARY_PATH:-}" ]]; then
+        export LD_LIBRARY_PATH="$TCLTK_PREFIX/lib"
+    else
+        export LD_LIBRARY_PATH="$TCLTK_PREFIX/lib:$LD_LIBRARY_PATH"
+    fi
 
-    # xschem Installation
-    echo "Cloning xschem..."
-    rm -rf xschem-src
-    git clone https://github.com/StefanSchippers/xschem.git xschem-src || error_exit "Failed to clone xschem."
-    cd xschem-src
+    export PATH="/usr/local/bin:$PATH"
+    export DISPLAY="${DISPLAY:-:0}"
 
-    echo "Configuring xschem..."
-    ./configure || error_exit "Failed to configure xschem."
-    echo "Building xschem..."
-    sudo make || error_exit "Failed to build xschem."
-    echo "Installing xschem..."
-    sudo make install || error_exit "Failed to install xschem."
-    cd ..
 
-    # NGspice Installation
-    echo "Installing NGspice..."
-    rm -rf ngspice-ngspice
-    git clone https://git.code.sf.net/p/ngspice/ngspice ngspice-ngspice || error_exit "Failed to clone ngspice."
-    cd ngspice-ngspice
+    #----------------------------------------
+    # 7) clone, build & install XSchem
+    echo "Cloning XSchem..."
+    rm -rf /tmp/xschem
+    git clone https://github.com/StefanSchippers/xschem.git /tmp/xschem \
+        || error_exit "Failed to clone XSchem."
+    cd /tmp/xschem
+    git checkout 973d01f                                 \
+        || error_exit "Failed to checkout commit 973d01f."
 
-    ./autogen.sh --adms || error_exit "Failed to run autogen.sh for ngspice."
-    mkdir release
-    cd release
-    ../configure --with-x --with-xspice --enable-openmp --enable-adms --with-readline=yes --disable-debug || error_exit "ngspice configure failed."
-    sudo make -j4 || error_exit "Failed to compile ngspice."
-    sudo make install || error_exit "Failed to install ngspice."
+    echo "Configuring XSchem..."
+    ./configure --prefix="/usr/local"              \
+        || error_exit "XSchem configure failed."
 
-    # # Example: copy specialized modeling blocks if needed
-    # sudo cp -r ../rad_modeling_blocks /usr/local/share || true
+    echo "Patching Makefile.conf..."
+    sed -i.bak \
+    -e 's|CFLAGS=.*|CFLAGS=-std=c99 -I/usr/include/X11 -I/usr/include/cairo -I/usr/local/include -I/usr/include/jpeg -O2|' \
+    -e 's|LDFLAGS=.*|LDFLAGS=-L/usr/lib -L/usr/local/lib -lm -lcairo -ljpeg -lX11 -lXrender -lxcb -lxcb-render -lXpm -ltcl8.6 -ltk8.6|' \
+    Makefile.conf
 
-    # # Add rad_modeling_blocks to the xschem library path
-    # mkdir -p ~/.xschem
-    # {
-    #     echo "append XSCHEM_LIBRARY_PATH :/usr/local/share/rad_modeling_blocks"
-    #     echo "append XSCHEM_LIBRARY_PATH :$HOME"
-    #     echo "set XSCHEM_START_WINDOW {/usr/local/share/rad_modeling_blocks/top.sch}"
-    # } >> ~/.xschem/xschemrc
+    echo "Building XSchem..."
+    make clean && make                                   \
+        || error_exit "XSchem build failed."
 
+    echo "Installing XSchem..."
+    sudo make install                                    \
+        || error_exit "XSchem install failed."
+
+    echo "XSchem installation completed!"
+
+    #----------------------------------------
     echo "WSL installation completed successfully. Remember to run an X server in Windows!"
+    #----------------------------------------
+
 
 elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################

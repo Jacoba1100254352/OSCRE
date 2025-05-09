@@ -61,6 +61,41 @@ if [ "$OS_TYPE" == "Darwin" ]; then
     
     
     echo "Uninstallation process completed successfully."
+
+
+elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
+    ########################################################################
+    # WSL Uninstall Script      (Same as Linux)
+    ########################################################################
+    echo "Detected WSL. Running WSL uninstall script..."
+
+    set -eu -o pipefail # fail on error and report it, debug all lines
+
+    sudo -n true    # Run as a superuser and do not ask for a password. Exit status as successful.
+    test $? -eq 0 || error_exit "you should have sudo privilege to run this script"
+
+    # MAGIC
+    echo "Removing MAGIC..."
+    sudo rm -rf magic
+
+    # OPEN PDK
+    echo "Removing OPEN PDK..."
+    sudo rm -rf open_pdks
+
+    echo "installing the must-have pre-requisites"
+    sudo apt-get remove --purge -y \
+        flex bison m4 libfl-dev tcl-dev tk-dev \
+        libcairo2-dev libxcb1-dev libx11-xcb-dev \
+        libxrender-dev libxpm-dev libncurses-dev \
+        libreadline-dev gawk tcsh csh gfortran tig
+
+    # Auto‑remove any orphaned packages
+    echo "Auto-removing orphaned packages..."
+    sudo apt-get autoremove --purge -y
+
+    echo "Uninstall completed successfully."
+
+
 elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################
     # Linux Uninstall Script
@@ -88,7 +123,7 @@ elif [ "$OS_TYPE" == "Linux" ]; then
         libreadline-dev gawk tcsh csh gfortran tig
 
     # Auto‑remove any orphaned packages
-    echo "Auto‑removing orphaned packages..."
+    echo "Auto-removing orphaned packages..."
     sudo apt-get autoremove --purge -y
 
     echo "Uninstall completed successfully."

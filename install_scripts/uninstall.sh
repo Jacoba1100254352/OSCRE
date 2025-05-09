@@ -106,10 +106,66 @@ if [ "$OS_TYPE" == "Darwin" ]; then
 
 elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
     ########################################################################
-    # WSL Installation Script
+    # WSL Uninstall Script      (Same as Linux)
     ########################################################################
-    echo "Detected WSL (Windows Subsystem for Linux)."
-    echo "No uninstall yet"
+    echo "Detected WSL. Running WSL uninstall script..."
+
+    set -euo pipefail
+
+    #----------------------------------------
+    # helper for fatal errors
+    error_exit() {
+        echo "Error: $1" >&2
+        exit 1
+    }
+
+    #----------------------------------------
+    # check sudo
+    if ! sudo -n true 2>/dev/null; then
+        error_exit "Requires sudo privileges."
+    fi
+
+    echo "Removing XSchem binary, Tcl/Tk libs, headers…"
+    sudo rm -f /usr/local/bin/xschem
+    sudo rm -f /usr/local/bin/wish8.6 /usr/local/bin/tclsh8.6
+    sudo rm -rf /usr/local/lib/libtk8.6* /usr/local/lib/libtcl8.6*
+    sudo rm -rf /usr/local/include/tk8.6 /usr/local/include/tcl8.6
+
+    echo "Cleaning up any leftover share files…"
+    sudo rm -rf /usr/local/share/xschem
+    sudo rm -rf /tmp/tcl8.6.13 /tmp/tk8.6.13 /tmp/xschem
+
+    echo "Updating linker cache…"
+    sudo ldconfig
+
+    echo "Undoing shell config edits…"
+    SHELL_RC=""
+    if [[ -f "$HOME/.bashrc" ]]; then
+        SHELL_RC="$HOME/.bashrc"
+    elif [[ -f "$HOME/.zshrc" ]]; then
+        SHELL_RC="$HOME/.zshrc"
+    fi
+
+    if [[ -n "$SHELL_RC" ]]; then
+        # Remove our block of exports
+        sed -i '/# ---- added by xschem install script ----/,/# -----------------------------------------/d' "$SHELL_RC"
+        echo "Removed XSchem exports from $SHELL_RC"
+    else
+        echo "No ~/.bashrc or ~/.zshrc detected; skipping shell-config cleanup."
+    fi
+
+    echo "Uninstalling APT packages that were installed for XSchem…"
+    PACKAGES=(
+        libx11-dev libxpm-dev libxext-dev libxaw7-dev \
+        libxrender-dev libcairo2-dev libjpeg-dev tcl8.6-dev \
+        tk8.6-dev libreadline-dev flex bison gawk autoconf \
+        automake libtool libtool-bin libx11-xcb-dev ngspice
+    )
+    sudo apt-get remove --purge -y "${PACKAGES[@]}"
+    sudo apt-get autoremove -y
+
+    echo "Uninstall completed successfully."
+
 
 elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################
@@ -125,12 +181,6 @@ elif [ "$OS_TYPE" == "Linux" ]; then
         echo "Error: $1" >&2
         exit 1
     }
-
-    #----------------------------------------
-    # must be Linux
-    if [[ "$(uname -s)" != "Linux" ]]; then
-        error_exit "This uninstall script is for Linux only."
-    fi
 
     #----------------------------------------
     # check sudo

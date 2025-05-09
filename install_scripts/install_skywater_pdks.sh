@@ -78,10 +78,56 @@ if [ "$OS_TYPE" == "Darwin" ]; then
     rm -rf ~/my_venv_pdk_rad_hard
 
 elif [[ "$KERNEL_INFO" == *microsoft* ]]; then
-    sudo apt update
-    sudo apt upgrade
-    
-    
+    ########################################################################
+    # WSL Installation Script       (Same as Linux)
+    ########################################################################
+    echo "Detected WSL. Running WSL installation script..."
+
+    set -eu -o pipefail # fail on error and report it, debug all lines
+
+    sudo -n true    # Run as a superuser and do not ask for a password. Exit status as successful.
+    test $? -eq 0 || error_exit "you should have sudo privilege to run this script"
+
+    echo "installing the must-have pre-requisites"
+    while read -r p ; do sudo apt-get install -y $p ; done < <(cat << "EOF"
+        git build-essential flex bison m4 tcsh csh
+        libx11-dev tcl-dev tk-dev libcairo2 libcairo2-dev
+        libxcb1 libx11-xcb-dev libxrender1 libxrender-dev libxpm4 libxpm-dev libncurses-dev
+        gawk libtool readline-common libreadline-dev autoconf automake
+        gcc g++ gfortran make cmake libfl-dev wget tig
+EOF
+    )
+
+    # MAGIC
+    echo "Installing MAGIC..."
+    git clone https://github.com/RTimothyEdwards/magic
+    cd magic
+
+    ./configure
+    sudo make
+    sudo make install
+    cd ..
+
+    # OPEN PDK
+    echo "Installing OPEN PDK..."
+    git clone https://github.com/RTimothyEdwards/open_pdks
+    cd open_pdks
+
+    ./configure
+    sudo make
+    sudo make install
+
+    ./configure --enable-sky130-pdk --enable-sram-sky130
+    sudo make -j2
+    sudo make install
+
+#    ./configure --enable-sky130-pdk --enable-sram-sky130
+#    make
+#    sudo make install
+#    make veryclean
+
+    echo "Installation completed successfully."
+
     
 elif [ "$OS_TYPE" == "Linux" ]; then
     ########################################################################
